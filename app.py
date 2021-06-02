@@ -88,7 +88,6 @@ schema = graphene.Schema(query=Query, mutation=Mutation)
 def index():
     return '<p> Hello Scrawler!</p>'
 
-
 app.add_url_rule(
     '/graphql',
     view_func=GraphQLView.as_view(
