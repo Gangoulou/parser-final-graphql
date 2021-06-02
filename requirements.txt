@@ -9,3 +9,4 @@ SQLAlchemy~=1.4.17
 flask_sqlalchemy
 graphene-sqlalchemy>=2.0
 flask_graphql
+flask_rabbitmq

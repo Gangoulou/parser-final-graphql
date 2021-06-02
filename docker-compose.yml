@@ -17,6 +17,12 @@ services:
       context: .
     command: 'python populate.py'
 
+  rabbit:
+    hostname: rabbit
+    image: rabbitmq:latest
+    ports:
+      - "5672:5672"
+
   db:
     platform: linux/x86_64
     image: mariadb:10.5.8

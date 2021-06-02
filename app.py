@@ -3,12 +3,14 @@ import os
 from datetime import date
 
 import graphene
+import pika
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, Response
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from graphene_sqlalchemy import SQLAlchemyObjectType, SQLAlchemyConnectionField
 from flask_graphql import GraphQLView
 from selenium import webdriver
+from flask_rabbitmq import RabbitMQ
 
 app = Flask(__name__)
 app.debug = True
@@ -20,6 +22,23 @@ app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 # Modules
 db = SQLAlchemy(app)
+
+# connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+# channel = connection.channel()
+# channel.queue_declare(queue='hello')
+# channel.basic_publish(exchange='',
+#                       routing_key='hello',
+#                       body='Hello World!')
+# print(" [x] Sent 'Hello World!'")
+
+# app.config.setdefault('RABMQ_RABBITMQ_URL', 'amqp://username:password@ip:port/dev_vhost')
+# app.config.setdefault('RABMQ_SEND_EXCHANGE_NAME', 'flask_rabmq')
+# app.config.setdefault('RABMQ_SEND_EXCHANGE_TYPE', 'topic')
+# app.config.setdefault('RABMQ_SEND_POOL_SIZE', 2)
+# app.config.setdefault('RABMQ_SEND_POOL_ACQUIRE_TIMEOUT', 5)
+#
+# ramq = RabbitMQ()
+# ramq.init()
 
 
 # Models
@@ -86,6 +105,20 @@ class CreatePost(graphene.Mutation):
 class Mutation(graphene.ObjectType):
     create_post = CreatePost.Field()
 
+@app.route('/add-job/<cmd>')
+def add(cmd):
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host='rabbitmq'))
+    channel = connection.channel()
+    channel.queue_declare(queue='task_queue', durable=True)
+    channel.basic_publish(
+        exchange='',
+        routing_key='task_queue',
+        body=cmd,
+        properties=pika.BasicProperties(
+            delivery_mode=2,  # make message persistent
+        ))
+    connection.close()
+    return " [x] Sent: %s" % cmd
 
 schema = graphene.Schema(query=Query, mutation=Mutation)
 
@@ -98,6 +131,14 @@ def index():
     return '<p> Hello Scrawler!</p>'
 
 
+@app.route('/getPost')
+def getPost():
+    startParser()
+    # post = CreatePost.mutate(title='test', body='test', info='test',
+    #                          self=True, username='test', date=date.today())
+    return '<p> Hello Scrawler!</p>'
+
+
 def parse_pages():
     browser = webdriver.Chrome()
     browser.get('https://best.znaj.ua/')
@@ -106,7 +147,7 @@ def parse_pages():
         for title in Titles:
             print(title.text, '\n')
             post = CreatePost.mutate(title=title.text, body='', info='',
-                             self=True, username='', date=date.today())
+                                     self=True, username='', date=date.today())
     return browser.quit()
 
     # chrome_options = Options()
