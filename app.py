@@ -1,10 +1,14 @@
+import atexit
 import os
+from datetime import date
 
 import graphene
-from flask import Flask
+from apscheduler.schedulers.background import BackgroundScheduler
+from flask import Flask, Response
 from flask_sqlalchemy import SQLAlchemy
 from graphene_sqlalchemy import SQLAlchemyObjectType, SQLAlchemyConnectionField
 from flask_graphql import GraphQLView
+from selenium import webdriver
 
 app = Flask(__name__)
 app.debug = True
@@ -34,6 +38,7 @@ class Post(db.Model):
     uuid = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(256), index=True)
     body = db.Column(db.Text)
+    date = db.Column(db.Date)
     author_id = db.Column(db.Integer, db.ForeignKey('users.uuid'))
 
     def __repr__(self):
@@ -63,13 +68,14 @@ class CreatePost(graphene.Mutation):
     class Arguments:
         title = graphene.String(required=True)
         body = graphene.String(required=True)
+        date = graphene.String(required=True)
         username = graphene.String(required=True)
 
     post = graphene.Field(lambda: PostObject)
 
-    def mutate(self, info, title, body, username):
+    def mutate(self, info, title, body, username, date):
         user = User.query.filter_by(username=username).first()
-        post = Post(title=title, body=body)
+        post = Post(title=title, body=body, date=date)
         if user is not None:
             post.author = user
         db.session.add(post)
@@ -86,7 +92,46 @@ schema = graphene.Schema(query=Query, mutation=Mutation)
 
 @app.route('/')
 def index():
+    startParser()
+    post = CreatePost.mutate(title='test', body='test', info='test',
+                             self=True, username='test', date=date.today())
     return '<p> Hello Scrawler!</p>'
+
+
+def parse_pages():
+    browser = webdriver.Chrome()
+    browser.get('https://best.znaj.ua/')
+    for i in range(0, 10):
+        Titles = browser.find_elements_by_tag_name('h4')
+        for title in Titles:
+            print(title.text, '\n')
+            post = CreatePost.mutate(title=title.text, body='', info='',
+                             self=True, username='', date=date.today())
+    return browser.quit()
+
+    # chrome_options = Options()
+    # chrome_options.add_argument('--verbose')
+    # chrome_options.add_argument('--headless')
+    # chrome_options.add_argument('--disable-gpu')
+    # chrome_options.add_argument('--no-sandbox')
+    # chrome_options.add_argument('--disable-dev-shm-usage')
+    # # browser = webdriver.Remote(
+    # #     command_executor='http://localhost:53645/',
+    # #     desired_capabilities=chrome_options.to_capabilities())
+    # browser = webdriver.Chrome()
+    # browser.get('http://www.znaj.ua')
+    # Titles = browser.find_elements_by_tag_name('h4')
+    # for title in Titles:
+    #
+    # return Titles
+
+
+def startParser():
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(func=parse_pages, trigger="interval", seconds=10)
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown())
+
 
 app.add_url_rule(
     '/graphql',
